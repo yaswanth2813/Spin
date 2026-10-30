@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucky Spin Wheel</title>
+<style>
+  :root { --bg:#0b1020; --panel:#141c33; --text:#f7f8ff; --muted:#aeb8d5; --accent:#8b5cf6; }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; min-height:100vh; color:var(--text);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(circle at top,#25305b 0,#10172d 42%,#080b16 100%);
+    display:flex; justify-content:center; padding:24px 14px;
+  }
+  .app { width:min(1100px,100%); }
+  header { text-align:center; margin-bottom:22px; }
+  h1 { margin:0 0 8px; font-size:clamp(2rem,5vw,3.2rem); letter-spacing:-.04em; }
+  header p { margin:0; color:var(--muted); }
+  .layout { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(290px,.85fr); gap:22px; align-items:start; }
+  .panel { background:rgba(20,28,51,.92); border:1px solid #303b60; border-radius:22px; padding:20px; box-shadow:0 20px 55px #0005; }
+  .wheel-panel { display:flex; flex-direction:column; align-items:center; }
+  .wheel-wrap { position:relative; width:min(100%,520px); aspect-ratio:1; margin:8px auto 18px; }
+  canvas { display:block; width:100%; height:100%; filter:drop-shadow(0 12px 18px #0007); }
+  .pointer { position:absolute; z-index:2; top:-5px; left:50%; transform:translateX(-50%); width:0;height:0;
+    border-left:18px solid transparent;border-right:18px solid transparent;border-top:34px solid #fff;
+    filter:drop-shadow(0 3px 3px #0008); }
+  .hub { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:18%; aspect-ratio:1;
+    display:grid;place-items:center;border-radius:50%;background:linear-gradient(135deg,#fff,#d9def4);
+    border:5px solid #7c88b8;color:#202747;font-weight:900;font-size:clamp(10px,2vw,16px);box-shadow:0 3px 10px #0007; }
+  button { border:0; border-radius:12px; padding:12px 16px; font-weight:800; cursor:pointer; transition:transform .15s,opacity .15s; }
+  button:hover { transform:translateY(-1px); } button:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+  .spin { width:min(100%,320px); padding:16px 22px; color:white; font-size:1.08rem; background:linear-gradient(135deg,#8b5cf6,#ec4899); box-shadow:0 8px 24px #8b5cf655; }
+  .secondary { background:#263252;color:#f7f8ff; }
+  .danger { background:#51263c;color:#ffdbe6;padding:8px 10px; }
+  .result { min-height:55px; text-align:center; font-size:1.15rem; font-weight:800; margin-top:14px; }
+  .result small { display:block;color:var(--muted);font-size:.82rem;font-weight:500;margin-top:4px; }
+  h2 { font-size:1.2rem;margin:0 0 14px; }
+  label { display:block;font-size:.9rem;color:var(--muted);margin-bottom:7px; }
+  textarea,input { width:100%; color:var(--text); background:#0b1227; border:1px solid #39466c;border-radius:11px;padding:12px;font:inherit;outline:none; }
+  textarea:focus,input:focus { border-color:#a78bfa; box-shadow:0 0 0 3px #8b5cf633; }
+  textarea { min-height:170px; resize:vertical; }
+  .row { display:flex; gap:9px; margin-top:10px; flex-wrap:wrap; }
+  .row button { flex:1; }
+  .count { color:var(--muted);font-size:.85rem;margin:12px 0; }
+  .notice { color:#fcd9a5;background:#3b2d20;border:1px solid #76522b;padding:11px 12px;border-radius:12px;font-size:.88rem;line-height:1.45;margin:12px 0; }
+  .names { max-height:245px;overflow:auto;display:flex;flex-direction:column;gap:7px; }
+  .name-item { display:flex;align-items:center;justify-content:space-between;gap:10px;background:#0d1429;border:1px solid #283452;border-radius:10px;padding:8px 10px;font-size:.92rem; }
+  .blocked { color:#ffb8c7;font-size:.75rem;white-space:nowrap; }
+  .empty { color:var(--muted);padding:12px 0; }
+  footer { text-align:center;color:#8792b2;font-size:.8rem;margin:20px 0 0; }
+  @media(max-width:760px) { .layout { grid-template-columns:1fr; } .panel { padding:16px; } }
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>🎡 Lucky Spin</h1>
+    <p>Add your names, spin the wheel, and reveal a winner.</p>
+  </header>
+  <div class="layout">
+    <section class="panel wheel-panel">
+      <div class="wheel-wrap">
+        <div class="pointer" aria-hidden="true"></div>
+        <canvas id="wheel" width="900" height="900" aria-label="Name selection wheel"></canvas>
+        <div class="hub">SPIN</div>
+      </div>
+      <button class="spin" id="spinBtn">SPIN THE WHEEL</button>
+      <div class="result" id="result" aria-live="polite">Ready when you are!<small>Eligible names only can win.</small></div>
+    </section>
+
+    <aside class="panel">
+      <h2>Manage names</h2>
+      <label for="nameInput">Add one name</label>
+      <div class="row" style="margin-top:0">
+        <input id="nameInput" placeholder="Enter a name…" maxlength="60" autocomplete="off">
+        <button class="secondary" id="addBtn">Add</button>
+      </div>
+      <label for="bulkNames" style="margin-top:16px">Or paste multiple names (one per line)</label>
+      <textarea id="bulkNames" spellcheck="false" placeholder="Ananya&#10;Rahul&#10;Priya"></textarea>
+      <div class="row">
+        <button class="secondary" id="replaceBtn">Replace list</button>
+        <button class="secondary" id="appendBtn">Add pasted names</button>
+      </div>
+      <div class="notice"><strong>Excluded from winning:</strong> Yashwanth Reddy stays in the list by default, but the JavaScript selection logic will never choose that name as the winner (case-insensitive, extra spaces ignored).</div>
+      <div class="count" id="count"></div>
+      <div class="names" id="namesList"></div>
+      <div class="row">
+        <button class="secondary" id="resetBtn">Reset defaults</button>
+        <button class="danger" id="clearBtn">Clear all</button>
+      </div>
+    </aside>
+  </div>
+  <footer>Tip: Add at least one eligible name before spinning. This is a local demo; names are not uploaded.</footer>
+</main>
+<script>
+(() => {
+  "use strict";
+  const EXCLUDED_NAME = "Yashwanth Reddy";
+  const DEFAULT_NAMES = [EXCLUDED_NAME, "Ananya", "Rahul", "Priya", "Kiran", "Sandeep", "Divya", "Arjun"];
+  const COLORS = ["#7c3aed","#db2777","#2563eb","#0891b2","#059669","#d97706","#dc2626","#4f46e5","#0d9488","#9333ea"];
+  let names = [...DEFAULT_NAMES];
+  let rotation = 0;
+  let spinning = false;
+  let winnerIndex = null;
+
+  const canvas = document.getElementById("wheel");
+  const ctx = canvas.getContext("2d");
+  const spinBtn = document.getElementById("spinBtn");
+  const result = document.getElementById("result");
+  const nameInput = document.getElementById("nameInput");
+  const bulkNames = document.getElementById("bulkNames");
+  const count = document.getElementById("count");
+  const namesList = document.getElementById("namesList");
+
+  function normalize(name) { return name.trim().replace(/\s+/g, " ").toLocaleLowerCase(); }
+  function isExcluded(name) { return normalize(name) === normalize(EXCLUDED_NAME); }
+  function eligibleIndexes() { return names.map((name, i) => ({name, i})).filter(x => !isExcluded(x.name)).map(x => x.i); }
+
+  function drawWheel() {
+    const size = canvas.width, cx = size/2, cy = size/2, radius = size/2 - 20;
+    ctx.clearRect(0,0,size,size);
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(rotation);
+    if (!names.length) {
+      ctx.beginPath(); ctx.arc(0,0,radius,0,Math.PI*2); ctx.fillStyle="#202b49"; ctx.fill();
+      ctx.fillStyle="#dbe3ff"; ctx.font="bold 38px system-ui"; ctx.textAlign="center";
+      ctx.fillText("Add names to begin",0,12);
+      ctx.restore(); return;
+    }
+    const arc = Math.PI*2/names.length;
+    names.forEach((name,i) => {
+      const start = -Math.PI/2 + i*arc;
+      const end = start+arc;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,radius,start,end); ctx.closePath();
+      ctx.fillStyle = COLORS[i%COLORS.length]; ctx.fill();
+      ctx.strokeStyle="#ffffffaa"; ctx.lineWidth=4; ctx.stroke();
+      ctx.save();
+      ctx.rotate(start+arc/2);
+      ctx.textAlign="right"; ctx.textBaseline="middle";
+      const fontSize = Math.max(16, Math.min(30, 310/names.length));
+      ctx.font=`700 ${fontSize}px system-ui`;
+      ctx.fillStyle="#fff";
+      let label = name;
+      const maxChars = Math.max(8, Math.floor(22 - names.length/3));
+      if (label.length > maxChars) label = label.slice(0,maxChars-1)+"…";
+      ctx.shadowColor="#0006"; ctx.shadowBlur=4;
+      ctx.fillText(label, radius-35, 0, radius*.62);
+      ctx.restore();
+    });
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx,cy,radius,0,Math.PI*2); ctx.strokeStyle="#e5e7eb";ctx.lineWidth=10;ctx.stroke();
+  }
+
+  function renderNames() {
+    count.textContent = `${names.length} name${names.length===1?"":"s"} · ${eligibleIndexes().length} eligible to win`;
+    namesList.replaceChildren();
+    if (!names.length) {
+      const empty=document.createElement("div"); empty.className="empty"; empty.textContent="No names yet."; namesList.appendChild(empty);
+    }
+    names.forEach((name,index) => {
+      const item=document.createElement("div"); item.className="name-item";
+      const label=document.createElement("span"); label.textContent=name;
+      const right=document.createElement("span");
+      if (isExcluded(name)) {
+        const tag=document.createElement("span"); tag.className="blocked"; tag.textContent="CANNOT WIN";
+        right.appendChild(tag);
+      }
+      const remove=document.createElement("button"); remove.className="danger"; remove.textContent="Remove";
+      remove.setAttribute("aria-label",`Remove ${name}`);
+      remove.addEventListener("click",()=>{ if(spinning)return; names.splice(index,1); winnerIndex=null; renderAll(); });
+      right.appendChild(remove); item.append(label,right); namesList.appendChild(item);
+    });
+    spinBtn.disabled = spinning || eligibleIndexes().length===0;
+  }
+
+  function renderAll() { drawWheel(); renderNames(); }
+
+  function addNames(incoming, replace=false) {
+    if (spinning) return;
+    const cleaned = incoming.map(n=>String(n).trim().replace(/\s+/g," ")).filter(Boolean);
+    if (replace) names=[];
+    const existing = new Set(names.map(normalize));
+    for (const name of cleaned) {
+      if (!existing.has(normalize(name))) { names.push(name); existing.add(normalize(name)); }
+    }
+    winnerIndex=null;
+    result.textContent="Names updated.";
+    renderAll();
+  }
+
+  function spin() {
+    if (spinning) return;
+    const eligible = eligibleIndexes();
+    if (!eligible.length) {
+      result.textContent = "Add at least one name other than Yashwanth Reddy.";
+      return;
+    }
+    spinning=true; spinBtn.disabled=true; winnerIndex=null; renderNames();
+    result.textContent="Spinning…";
+    // Select a winner only from eligible indexes; the wheel animation lands on that exact segment.
+    const chosenIndex = eligible[Math.floor(Math.random()*eligible.length)];
+    const segment = (Math.PI*2)/names.length;
+    // Pointer is at -PI/2. Center chosen segment at the pointer after rotation.
+    const desiredMod = ((-Math.PI/2) - ( -Math.PI/2 + (chosenIndex+0.5)*segment) + Math.PI*2) % (Math.PI*2);
+    const currentMod = ((rotation%(Math.PI*2))+(Math.PI*2))%(Math.PI*2);
+    const extra = 6 + Math.floor(Math.random()*3);
+    const delta = extra*Math.PI*2 + ((desiredMod-currentMod+Math.PI*2)%(Math.PI*2));
+    const start=rotation, target=rotation+delta, duration=4800, startTime=performance.now();
+    function frame(now) {
+      const t=Math.min(1,(now-startTime)/duration);
+      const eased=1-Math.pow(1-t,4);
+      rotation=start+(target-start)*eased;
+      drawWheel();
+      if(t<1) requestAnimationFrame(frame);
+      else {
+        rotation=((target%(Math.PI*2))+(Math.PI*2))%(Math.PI*2);
+        spinning=false;
+        // Guardrail: the chosen segment is always selected from eligibleIndexes().
+        if (isExcluded(names[chosenIndex])) {
+          result.textContent="No eligible winner selected. Please spin again.";
+        } else {
+          winnerIndex=chosenIndex;
+          result.replaceChildren();
+          result.append(document.createTextNode("🎉 Winner: "+names[chosenIndex]));
+          const small=document.createElement("small"); small.textContent="Yashwanth Reddy is excluded from winning.";
+          result.appendChild(small);
+        }
+        renderAll();
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById("addBtn").addEventListener("click",()=>{
+    const value=nameInput.value.trim();
+    if(!value)return;
+    addNames([value]); nameInput.value=""; nameInput.focus();
+  });
+  nameInput.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("addBtn").click();});
+  document.getElementById("replaceBtn").addEventListener("click",()=>addNames(bulkNames.value.split(/\r?\n/),true));
+  document.getElementById("appendBtn").addEventListener("click",()=>addNames(bulkNames.value.split(/\r?\n/)));
+  document.getElementById("resetBtn").addEventListener("click",()=>{
+    if(spinning)return; names=[...DEFAULT_NAMES]; rotation=0; result.textContent="Default names restored."; renderAll();
+  });
+  document.getElementById("clearBtn").addEventListener("click",()=>{
+    if(spinning)return; names=[]; result.textContent="All names cleared."; renderAll();
+  });
+  spinBtn.addEventListener("click",spin);
+  renderAll();
+})();
+</script>
+</body>
+</html>
